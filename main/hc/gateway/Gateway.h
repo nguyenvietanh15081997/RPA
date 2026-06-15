@@ -1,0 +1,126 @@
+#pragma once
+
+#include <string>
+#include <map>
+#include <functional>
+#include <thread>
+#include <mutex>
+#include "json.h"
+#include "Define.h"
+#include "ErrorCode.h"
+#include "CloudProtocol.h"
+#include "LocalProtocol.h"
+#include "Udp.h"
+#include "Device.h"
+#include "DeviceBle.h"
+#include "Util.h"
+
+#include "BleDefine.h"
+#include "BleProtocol.h"
+
+using namespace std;
+
+#define DEVICE_TYPE_SOCKET_1 0x020608
+#define DEVICE_TYPE_SWITCH_1 0x020235
+#define DEVICE_TYPE_SWITCH_2 0x020237
+#define DEVICE_TYPE_SWITCH_3 0x020239
+#define DEVICE_TYPE_SWITCH_4 0x02023B
+
+class Gateway : public CloudProtocol, public LocalProtocol, public Udp
+{
+private:
+	string id;
+	string mac;
+	string version;
+	string ble_netkey;
+	string ble_appkey;
+	string ble_devicekey;
+	uint16_t ble_addr;
+	uint32_t ble_iv_index;
+	string dormitoryId;
+	string refresh_token;
+	string data;
+	thread *udpBroadcastThread;
+	atomic<bool> isUdpBroadcasting;
+
+	void OnCloudConnect(bool isConnected, bool isReconnect);
+	void OnLocalConnect(bool isConnected, bool isReconnect);
+
+	// Udp message handle
+	void InitUdpMessage();
+	int OnUdpScanHc(Json::Value &reqValue, Json::Value &respValue);
+	int OnUdpHcScanWifi(Json::Value &reqValue, Json::Value &respValue);
+	int OnUdpHcSetup(Json::Value &reqValue, Json::Value &respValue);
+	int OnUdpHcInfo(Json::Value &reqValue, Json::Value &respValue);
+	int OnRpcSetPwMqttOnline(Json::Value &reqValue, Json::Value &respValue);
+	int OnScanIpHc(Json::Value &reqValue, Json::Value &respValue);
+
+	int OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue);
+	int OnPCBA_StartTestBLE(Json::Value &reqValue, Json::Value &respValue);
+	int OnRPA_GetInfo(Json::Value &reqValue, Json::Value &respValue);
+
+
+public:
+	Gateway(string mac, string address, int port, string clientId, string username, string password, int keepalive, string localAddress = "localhost", int localPort = 1883, string localUsername = "", string localPassword = "", int localKeepalive = 10);
+	~Gateway();
+	void init();
+
+	void ResetFactory();
+	void DelDatabase();
+
+	int RestartBleGw();
+	int TestSwitch();
+
+
+	Device *getDeviceFromMac(string mac);
+	Device *getDeviceFromId(string id);
+	DeviceBle *getDeviceBleFromAddr(uint16_t addr);
+	void delDevice(Device *device);
+
+	uint16_t getBleAddr();
+	uint32_t getBleIvIndex();
+	string getBleNetKey();
+	string getBleAppKey();
+	string getBleDeviceKey();
+	string getDormitory();
+	string getId();
+	string getVersion();
+	string getName();
+	string getRefreshToken();
+	string getData();
+	string getMac();
+	bool getAutoOta();
+
+	void setBleAddr(uint16_t addr);
+	void setBleIvIndex(uint32_t ivIndex);
+	void setBleNetkey(string netkey);
+	void setBleAppkey(string appkey);
+	void setBleDevicekey(string devicekey);
+	void setDormitory(string dormitory);
+	void setId(string id);
+	void setMac(string mac);
+	void setVersion(string version);
+	void setName(string name);
+	void setRefreshToken(string refresh_token);
+	void setData(string data);
+	void setAutoOta(bool isAutoOta);
+
+
+	int pushDeviceUpdateCloud(Json::Value &dataValue);
+	int pushNewDeviceLocal(Json::Value &dataValue);
+	int pushDeviceUpdateLocal(Json::Value &dataValue);
+	int pushNewDeviceCloud(Json::Value &dataValue);
+	int pushStartAddHc(Json::Value &dataValue);
+	int pushStopAddHc(Json::Value &dataValue);
+	int pushNotify(Json::Value &dataValue);
+
+	int Req_StartTest_BLEMesh(string mac);
+	int GetStatusConnectWifi(string mac);
+
+
+	int StartTestPCBA();
+};
+
+extern Gateway *gateway;
+
+int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macBle, string s_rssiBle, uint32_t s_type);
