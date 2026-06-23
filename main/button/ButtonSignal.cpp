@@ -61,7 +61,7 @@ static void ButtonSignalHandler(void *arg)
 			else if (cnt == 15)
 			{
 				SetLedInternet(false);
-				SetLedService(false);
+				// SetLedService(false);
 			}
 			else if (cnt == 20)
 			{
@@ -72,7 +72,7 @@ static void ButtonSignalHandler(void *arg)
 		{
 			if (cnt > 0)
 			{
-				SetLedService(statusLedService);
+				// SetLedService(statusLedService);
 				if (cnt >= 1 && cnt < 5)
 				{
 					bleProtocol->ResetBle();
@@ -103,7 +103,7 @@ static void ButtonSignalHandler(void *arg)
 			}
 			else if (Wifi::WifiIsAPMode())
 			{
-				SetLedService(statusLedService);
+				// SetLedService(statusLedService);
 				startAPTimeCount++;
 				// gpio_set_level(GPIO_OUTPUT_IO_0, (led++) % 2);
 				sleep(1);
@@ -120,7 +120,7 @@ static void ButtonSignalHandler(void *arg)
 			}
 			else if (!Wifi::WifiIsAPMode() && (startAPTimeCount > 0))
 			{
-				SetLedService(statusLedService);
+				// SetLedService(statusLedService);
 				startAPTimeCount = 0;
 				if (Wifi::GetIP() == "10.10.10.1")
 				{
@@ -151,7 +151,7 @@ void ButtonSignal::init()
 	if (xTaskCreate(ButtonSignalHandler, "Button", 5120, (void *)this, 10, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 }
 
@@ -244,7 +244,7 @@ void gpio_init(void)
 	if (xTaskCreate(gpio_task_example, "gpio_task", 2048, NULL, 10, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task\n");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 
 	// install gpio isr service

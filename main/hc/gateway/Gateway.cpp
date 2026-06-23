@@ -79,7 +79,7 @@ void Gateway::init()
 	if (xTaskCreate(TestSwitchThread, "CheckOnline", 5120, this, 7, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 	vTaskDelay(10);
 #else
@@ -159,19 +159,9 @@ int Gateway::RestartBleGw()
 	sleep(1);
 	Util::ExecuteCMD("echo '1' > /sys/class/gpio/gpio1/value");
 #elif defined(ESP_PLATFORM)
-	SetGpioResetGwBle();
+	// SetGpioResetGwBle();
 #endif
 	return CODE_OK;
-}
-
-int Gateway::TestSwitch()
-{
-	while (1)
-	{
-		LOGI("TestSwitch");
-		StartTestPCBA();
-		sleep(1);
-	}
 }
 
 uint16_t Gateway::getBleAddr()
@@ -430,6 +420,7 @@ typedef struct __attribute__((packed))
 	string macBle;
 	string rssiBle;
 	uint32_t type;
+	uint32_t addr;
 } wifi_inf_test_pcba_t;
 
 wifi_inf_test_pcba_t inf;
@@ -446,6 +437,7 @@ int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macB
 	inf.macBle = s_macBle;
 	inf.rssiBle = s_rssiBle;
 	inf.type = s_type;
+	inf.addr = ((uint16_t)std::stoul(inf.macBle.substr(inf.macBle.length() - 4), nullptr, 16)) & 0x7fff;
 	hasRspUDP = true;
 	return CODE_OK;
 }
@@ -478,14 +470,15 @@ int ResetInfPCBA()
 // 	return addr;
 // }
 
-void rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool ble_status)
+bool rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool ble_status)
 {
 	Json::Value rs;
+	bool checkRs = true;
 	// rs["mac"] = qrProtocol->mac;
 	// rs["addr"] = qrProtocol->addr;
 	rs["version"] = "1.2";
-	rs["serial"] = "000000001-50787D552750";
-	rs["deviceType"] = Json::UInt(inf.type);
+	rs["serial"] = inf.macWifi;
+	rs["deviceType"] = to_string(Json::UInt(inf.type));
 	// rs["rssi"] = checkRssi ? bleProtocol->rssi : 0;
 
 	rs["wifi"] = wifi_status;
@@ -495,26 +488,42 @@ void rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool
 	rs["bluetoothMac"] = inf.macBle;
 	rs["bluetoothRssi"] = inf.rssiBle;
 
+	if (!wifi_status | !ble_status)
+		checkRs = false;
+
 	rs["pos"] = pos;
 
-	rs["on_relay1"] = (stt_on_pos[0]) ? true : false;
-	rs["off_relay1"] = (stt_off_pos[0]) ? false : true;
+	rs["onRelay1"] = (stt_on_pos[0]) ? true : false;
+	rs["offRelay1"] = (stt_off_pos[0]) ? false : true;
 	if (num_ele > 1)
 	{
-		rs["on_relay2"] = (stt_on_pos[1]) ? true : false;
-		rs["off_relay2"] = (stt_off_pos[1]) ? false : true;
+		rs["onRelay2"] = (stt_on_pos[1]) ? true : false;
+		rs["offRelay2"] = (stt_off_pos[1]) ? false : true;
 	}
 	if (num_ele > 2)
 	{
-		rs["on_relay3"] = (stt_on_pos[2]) ? true : false;
-		rs["off_relay3"] = (stt_off_pos[2]) ? false : true;
+		rs["onRelay3"] = (stt_on_pos[2]) ? true : false;
+		rs["offRelay3"] = (stt_off_pos[2]) ? false : true;
 	}
 	if (num_ele > 3)
 	{
-		rs["on_relay4"] = (stt_on_pos[3]) ? true : false;
-		rs["off_relay4"] = (stt_off_pos[3]) ? false : true;
+		rs["onRelay4"] = (stt_on_pos[3]) ? true : false;
+		rs["offRelay4"] = (stt_off_pos[3]) ? false : true;
 	}
 
+	for (int i = 0; i < 3; i++)
+	{
+		if (stt_on_pos[i] == 0)
+		{
+			checkRs = false;
+			break;
+		}
+		if (stt_off_pos[i] == 1)
+		{
+			checkRs = false;
+			break;
+		}
+	}
 	Json::Value deviceJson = Json::arrayValue;
 	deviceJson.append(rs);
 	Json::Value dataPush;
@@ -529,6 +538,11 @@ void rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool
 	gateway->CloudPublish(dataPush.toString());
 
 	SLEEP_MS(10000);
+	return checkRs;
+}
+
+void rd_reporting_pcba_socket(bool relay, bool button, bool led1, bool led2, bool ble)
+{
 }
 
 enum
@@ -542,20 +556,30 @@ enum
 
 void ButtonInit()
 {
-	gpio_config_t io_conf;
-    // Cấu hình chân GPIO làm output
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = (1ULL << GPIO_NUM_12); // Chọn chân GPIO số 2
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    gpio_config(&io_conf);
-    gpio_set_direction(GPIO_NUM_12, GPIO_MODE_OUTPUT);
+	gpio_config_t io_conf = {
+		.pin_bit_mask = (1ULL << GPIO_NUM_13 | 1ULL << GPIO_NUM_14 | 1ULL << GPIO_NUM_26 | 1ULL << GPIO_NUM_27),
+		.mode = GPIO_MODE_INPUT,
+		.pull_up_en = GPIO_PULLUP_ENABLE,
+		.pull_down_en = GPIO_PULLDOWN_DISABLE,
+		.intr_type = GPIO_INTR_DISABLE};
+
+	gpio_config(&io_conf);
 }
 
-void ButtonSet(bool on)
+int GpioGetLevel(gpio_num_t pin)
 {
-	gpio_set_level(GPIO_NUM_12, on ? 1 : 0);
+	return gpio_get_level(pin);
+}
+
+int Gateway::TestSwitch()
+{
+	ButtonInit();
+	while (1)
+	{
+		LOGI("TestSwitch");
+		StartTestPCBA();
+		sleep(1);
+	}
 }
 
 int Gateway::StartTestPCBA()
@@ -565,74 +589,101 @@ int Gateway::StartTestPCBA()
 	// {
 	// 	GetSttGroupRelayPos(i);
 	// }
-
-	for (int i = 0; i < 3; i++)
+	if (GpioGetLevel(GPIO_NUM_13) == 0)
 	{
-		ResetInfPCBA();
-		SetPowerOnPos(i);
-		SLEEP_MS(5000);
+		LOGE("BUTTON ON");
+		BlinkLedService();
 
-		uint8_t count = 10;
-		hasRspUDP = false;
-		while (!hasRspUDP && count)
+		bool checkRs = true;
+		for (int i = 0; i < 3; i++)
 		{
-			GetStatusConnectWifi("0");
-			SLEEP_MS(1000);
-			count--;
-		}
-		if (count == 0)
-		{
-			LOGE("GetStatusConnectWifi timeout pos: %d", pos);
-			rd_reporting_proc_ctcu(1, i, false, false);
-			continue;
-		}
-		else
-		{
-			Req_StartTest_BLEMesh("0");
-			SLEEP_MS(1000);
-			Req_StartTest_BLEMesh("0");
-			SLEEP_MS(1000);
+			ResetInfPCBA();
+			SetPowerOnPos(i);
+			SLEEP_MS(5000);
 
-			if (inf.type == DEVICE_TYPE_SOCKET_1)
+			uint8_t count = 10;
+			hasRspUDP = false;
+			while (!hasRspUDP && count)
 			{
-				ButtonInit();
-				ButtonSet(true);
-				// TODO: Set button On
-				int ble_status = bleProtocol->RPA_Test_Socket(0xffff, 1, 1, 1); // ble_status = CODE_OK -> button OK
-
-				// TODO: Read stt Relay + led
-
-				// TODO: Set button On
-				ble_status = bleProtocol->RPA_Test_Socket(0xffff, 0, 0, 0); // ble_status = CODE_OK -> button OK
-
-				// TODO: Read stt Relay + led
+				GetStatusConnectWifi("0");
+				SLEEP_MS(1000);
+				count--;
 			}
-			else if (inf.type == DEVICE_TYPE_SWITCH_1 || inf.type == DEVICE_TYPE_SWITCH_2 || inf.type == DEVICE_TYPE_SWITCH_3 || inf.type == DEVICE_TYPE_SWITCH_4)
+			if (count == 0)
 			{
-				int ble_status = bleProtocol->ControlRelayOfSwitch(5 + i, 4, 0xFF, 1);
-				SLEEP_MS(1500);
-				for (int j = 0; j < 3; j++)
-				{
-					stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
-					LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
-				}
-
-				ble_status = bleProtocol->ControlRelayOfSwitch(5 + i, 4, 0xFF, 0);
-				SLEEP_MS(1500);
-				for (int j = 0; j < 3; j++)
-				{
-					stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
-					LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
-				}
-
-				rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false);
+				LOGE("GetStatusConnectWifi timeout pos: %d", pos);
+				// rd_reporting_proc_ctcu(1, i, false, false);
+				continue;
 			}
 			else
 			{
-				LOGI("Device type: Unknown");
+				Req_StartTest_BLEMesh("0");
+				SLEEP_MS(1000);
+				Req_StartTest_BLEMesh("0");
+				SLEEP_MS(1000);
+
+				if (inf.type == DEVICE_TYPE_SOCKET_1)
+				{
+					SetLedService(true);
+					// TODO: Set button On
+					int ble_status = bleProtocol->RPA_Test_Socket(0xffff, 1, 1, 1); // ble_status = CODE_OK -> button OK
+					SLEEP_MS(2000);
+					int lv1 = GpioGetLevel(GPIO_NUM_14);
+					int lv2 = GpioGetLevel(GPIO_NUM_26);
+					int lv3 = GpioGetLevel(GPIO_NUM_27);
+
+					// TODO: Read stt Relay + led
+
+					// TODO: Set button On
+					SetLedService(false);
+					ble_status = bleProtocol->RPA_Test_Socket(0xffff, 0, 0, 0); // ble_status = CODE_OK -> button OK
+					SLEEP_MS(2000);
+					lv1 = GpioGetLevel(GPIO_NUM_14);
+					lv2 = GpioGetLevel(GPIO_NUM_26);
+					lv3 = GpioGetLevel(GPIO_NUM_27);
+
+					// TODO: Read stt Relay + led
+				}
+				else if (inf.type == DEVICE_TYPE_SWITCH_1 || inf.type == DEVICE_TYPE_SWITCH_2 || inf.type == DEVICE_TYPE_SWITCH_3 || inf.type == DEVICE_TYPE_SWITCH_4)
+				{
+					int ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 1);
+					SLEEP_MS(1500);
+					for (int j = 0; j < 3; j++)
+					{
+						stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
+						LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
+					}
+
+					ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 0);
+					SLEEP_MS(1500);
+					for (int j = 0; j < 3; j++)
+					{
+						stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
+						LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
+					}
+
+					if (!rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false))
+						checkRs = false;
+				}
+				else
+				{
+					LOGI("Device type: Unknown");
+				}
 			}
+			SLEEP_MS(1000);
 		}
-		SLEEP_MS(1000);
+		if (checkRs)
+		{
+			SetLedService(true);
+		}
+		else
+		{
+			FlashLedService();
+		}
+	}
+	else
+	{
+		LOGE("BUTTON OFF");
 	}
 	return CODE_OK;
 }

@@ -96,12 +96,12 @@ void BleProtocol::init()
 	if (xTaskCreate(AddDeviceThread, "AddDeviceThread", 8192, this, 10, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 	if (xTaskCreate(HandleOpcodeBle, "HandleOpcodeBle", 10240, this, 10, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 #else
 	// thread addDeviceThreadThread(AddDeviceThread, this);
@@ -344,7 +344,7 @@ int BleProtocol::OnMessage(unsigned char *data, int len)
 	Util::LedBle(false);
 	Util::LedServiceLock();
 #ifdef ESP_PLATFORM
-	SetLedService(false);
+	// SetLedService(false);
 #endif
 	while (l >= 5)
 	{
@@ -456,7 +456,7 @@ int BleProtocol::OnMessage(unsigned char *data, int len)
 	Util::LedServiceUnlock();
 #ifdef ESP_PLATFORM
 	SLEEP_MS(70);
-	SetLedService(true);
+	// SetLedService(true);
 #endif
 	return l;
 }

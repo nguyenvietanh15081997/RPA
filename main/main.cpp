@@ -50,7 +50,7 @@ extern "C" void app_main(void)
 
 	Wifi::init();
 	// Sntp::init(Wifi::WaitConnecting());
-	// Led_init();
+	Led_init();
 
 	i2c_master_init();
 
@@ -64,7 +64,7 @@ extern "C" void app_main(void)
 		usleep(400000);
 	}
 	SetLedService(true);
-	SetLedInternet(true);
+	// SetLedInternet(true);
 
 	config = new Config();
 	config->ReadConfig();
@@ -89,15 +89,15 @@ extern "C" void app_main(void)
 	// gpioProtocol = new GPIOProtocol();
 	// gpioProtocol->gpio_init();
 	
-
-	string host = "broker.emqx.io";
+	string mac = Wifi::GetMacAddressHasDot();
+	string host = "10.10.10.1";
 	int port = 1883;
-	string clientId = "superuser";
-	string username = "superuser";
-	string password = "rd@2804";
+	string clientId = mac;
+	string username = "RD";
+	string password = "DD7443285C99DCC2F6F41509C010EC3C5747D71D4FC5CAB9E99826C605653187";
 	int keepAlive = 120;
 
-	string mac = Wifi::GetMacAddressHasDot();
+	
 	LOGI("mac: %s", mac.c_str());
 	gateway = new Gateway(mac, host, port, mac, username, password, keepAlive);
 	gateway->init();

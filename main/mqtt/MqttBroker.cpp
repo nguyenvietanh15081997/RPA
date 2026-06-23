@@ -607,14 +607,14 @@ void MqttBroker::init()
 	if (xTaskCreate(MqttBrokerThread, "MqttBroker", 10240, this, 10, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 	vTaskDelay(10);
 
 	if (xTaskCreate(OnMessageThread, "OnMessageThread", 20480, this, 5, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 	vTaskDelay(10);
 }

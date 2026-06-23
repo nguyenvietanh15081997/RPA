@@ -184,7 +184,7 @@ void Uart::init()
 	if (xTaskCreate(uart_event_task, "uart_event_task", 5120, this, 10, NULL) != pdPASS)
 	{
 		LOGE("Failed to create task");
-		SetLedService(false);
+		// SetLedService(false);
 	}
 }
 

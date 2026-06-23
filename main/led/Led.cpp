@@ -1,174 +1,128 @@
-
 #include "Led.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
-// #define LEDC_TIMER LEDC_TIMER_0
-#define LEDC_MODE LEDC_LOW_SPEED_MODE
-#define LEDC_OUTPUT_IO_0 (19) // Define the output GPIO
-#define LEDC_OUTPUT_IO_1 (18) // Define the output GPIO
-#define LEDC_CHANNEL LEDC_CHANNEL_0
-#define LEDC_DUTY_RES LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
-#define LEDC_DUTY (4095)                // Set duty to 50%. ((2 ** 13) - 1) * 50% = 4095
-#define LEDC_FREQUENCY (1)              // Frequency in Hertz. Set frequency at 5 kHz
-
-static bool statusLedInter = false;
 static bool statusLedService = false;
-static int modeLedInternet = -1;
-static int modeLedService = -1;
+static bool statusLedInternet = false;
+static led_mode_t modeLedService = LED_OFF;
+static led_mode_t modeLedInternet = LED_OFF;
 
-static void ledc_init(void)
+// Mutex bảo vệ LED
+static SemaphoreHandle_t led_mutex = NULL;
+
+// esp_timer cho toggle BLINK/FLASH
+static esp_timer_handle_t led_timer = NULL;
+
+// Counter đơn giản cho toggle
+static uint8_t blink_counter = 0;
+static bool toogle_service_flash = false;
+static bool toogle_service_blink = false;
+static bool toogle_internet_flash = false;
+static bool toogle_internet_blink = false;
+// LEDC init
+static void led_init_channels()
 {
-    // Prepare and then apply the LEDC PWM timer configuration
-    // ledc_timer_config_t ledc_timer = {
-    //     .speed_mode = LEDC_MODE,
-    //     .timer_num = LEDC_TIMER_0,
-    //     .duty_resolution = LEDC_DUTY_RES,
-    //     .freq_hz = LEDC_FREQUENCY // Set output frequency at 5 kHz
-    // };
-    ledc_timer_config_t ledc_timer;
-    ledc_timer.speed_mode = LEDC_MODE;
-    ledc_timer.timer_num = LEDC_TIMER_0;
-    ledc_timer.duty_resolution = LEDC_DUTY_RES;
-    ledc_timer.freq_hz = LEDC_FREQUENCY;
-    ledc_timer.clk_cfg = LEDC_AUTO_CLK;
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-    ledc_timer.timer_num = LEDC_TIMER_1;
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    gpio_config_t io_conf;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1ULL << LED_GPIO_SERVICE) /*| (1ULL << LED_GPIO_INTERNET)*/;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    gpio_config(&io_conf);
 
-    // Prepare and then apply the LEDC PWM channel configuration
-    // ledc_channel_config_t ledc_channel = {
-    //     .speed_mode = LEDC_MODE,
-    //     .channel = LEDC_CHANNEL_0,
-    //     .timer_sel = LEDC_TIMER_0,
-    //     .intr_type = LEDC_INTR_DISABLE,
-    //     .gpio_num = LEDC_OUTPUT_IO_0,
-    //     .duty = 0 // Set duty to 0%
-    // };
-    ledc_channel_config_t ledc_channel;
-    ledc_channel.speed_mode = LEDC_MODE;
-    ledc_channel.channel = LEDC_CHANNEL_0;
-    ledc_channel.timer_sel = LEDC_TIMER_0;
-    ledc_channel.intr_type = LEDC_INTR_DISABLE;
-    ledc_channel.gpio_num = LEDC_OUTPUT_IO_0;
-    ledc_channel.duty = 0;
-    ledc_channel.hpoint = 0;
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-
-    ledc_channel.channel = LEDC_CHANNEL_1;
-    ledc_channel.timer_sel = LEDC_TIMER_1;
-    ledc_channel.gpio_num = LEDC_OUTPUT_IO_1;
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    gpio_set_level(LED_GPIO_SERVICE, 0);
+    // gpio_set_level(LED_GPIO_INTERNET, 0);
 }
 
+// Mutex lock/unlock
+static void led_lock()
+{
+    if (led_mutex)
+        xSemaphoreTake(led_mutex, portMAX_DELAY);
+}
+static void led_unlock()
+{
+    if (led_mutex)
+        xSemaphoreGive(led_mutex);
+}
+
+// Timer callback
+static void led_timer_callback(void *arg)
+{
+    blink_counter++;
+
+    led_lock();
+    // LED Service
+    if (modeLedService == LED_BLINK)
+    {
+        if ((blink_counter % 5) == 0)
+            toogle_service_blink = !toogle_service_blink;
+        gpio_set_level(LED_GPIO_SERVICE, toogle_service_blink ? 1 : 0);
+    }
+    else if (modeLedService == LED_FLASH)
+    {
+        if ((blink_counter % 2) == 0)
+            toogle_service_flash = !toogle_service_flash;
+        gpio_set_level(LED_GPIO_SERVICE, toogle_service_flash ? 1 : 0);
+    }
+    else if (modeLedService == LED_ON)
+        gpio_set_level(LED_GPIO_SERVICE, 1);
+    else
+        gpio_set_level(LED_GPIO_SERVICE, 0);
+
+    // LED Internet
+    if (modeLedInternet == LED_BLINK)
+    {
+        if ((blink_counter % 5) == 0)
+            toogle_internet_blink = !toogle_internet_blink;
+        gpio_set_level(LED_GPIO_INTERNET, toogle_internet_blink ? 1 : 0);
+    }
+    else if (modeLedInternet == LED_FLASH)
+    {
+        if ((blink_counter % 2) == 0)
+            toogle_internet_flash = !toogle_internet_flash;
+        gpio_set_level(LED_GPIO_INTERNET, toogle_internet_flash ? 1 : 0);
+    }
+    else if (modeLedInternet == LED_ON)
+        gpio_set_level(LED_GPIO_INTERNET, 1);
+    else
+        gpio_set_level(LED_GPIO_INTERNET, 0);
+    led_unlock();
+}
+
+// ----------------- Init LED module -----------------
 void Led_init()
 {
-    ledc_init();
+    if (!led_mutex)
+        led_mutex = xSemaphoreCreateMutex();
+    led_init_channels();
 
-    // gpio_reset_pin(PIN_RESET_BLE);
-    // /* Set the GPIO as a push/pull output */
-    // gpio_set_direction(PIN_RESET_BLE, GPIO_MODE_OUTPUT);
-    // gpio_set_level(PIN_RESET_BLE, 0);
-    // vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // gpio_set_level(PIN_RESET_BLE, 1);
+    esp_timer_create_args_t timer_args = {
+        .callback = &led_timer_callback,
+        .name = "led_timer"};
+    esp_timer_create(&timer_args, &led_timer);
+    esp_timer_start_periodic(led_timer, 100 * 1000); // 100ms tick → BLINK 1Hz
 }
 
-void SetGpioResetGwBle()
+// ----------------- LED control -----------------
+void SetLedService(bool on)
 {
-    // gpio_config_t io_conf;
-    // // Cấu hình chân GPIO làm output
-    // io_conf.intr_type = GPIO_INTR_DISABLE;
-    // io_conf.mode = GPIO_MODE_OUTPUT;
-    // io_conf.pin_bit_mask = (1ULL << PIN_RESET_BLE);
-    // io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    // io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    // gpio_config(&io_conf);
-    gpio_set_direction(PIN_RESET_BLE, GPIO_MODE_OUTPUT);
-
-    gpio_set_level(PIN_RESET_BLE, 0);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    gpio_set_level(PIN_RESET_BLE, 1);
-
-    // gpio_reset_pin(PIN_RESET_BLE);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    modeLedService = !on ? LED_ON : LED_OFF;
+    statusLedService = on;
 }
-
-void SetLedInternet(bool status)
+void SetLedInternet(bool on)
 {
-    // modeLedInternet = LED_ON_OFF;
-    // statusLedInter = status;
-    // if (status)
-    // {
-    //     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, 0));
-    // }
-    // else
-    //     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, 8192));
-
-    // ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1));
-    // ledc_set_freq(LEDC_MODE, LEDC_TIMER_1, 5);
+    // modeLedInternet = !on ? LED_ON : LED_OFF;
+    // statusLedInternet = on;
 }
+void BlinkLedService() { modeLedService = LED_BLINK; }
+void FlashLedService() { modeLedService = LED_FLASH; }
+void BlinkLedInternet() { modeLedInternet = LED_BLINK; }
+void FlashLedInternet() { modeLedInternet = LED_FLASH; }
 
-void SetLedService(bool status)
-{
-    // modeLedService = LED_ON_OFF;
-    // statusLedService = status;
-    // if (status)
-    // {
-    //     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0));
-    // }
-    // else
-    //     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 8192));
-
-    // ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
-    // ledc_set_freq(LEDC_MODE, LEDC_TIMER_0, 5);
-}
-
-bool GetStatusLedInternet()
-{
-    return statusLedInter;
-}
-
-bool GetStatusLedService()
-{
-    return statusLedService;
-}
-
-void BlinkLedService()
-{
-    // modeLedService = LED_BLINK;
-    // ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY));
-    // ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
-    // ledc_set_freq(LEDC_MODE, LEDC_TIMER_0, 1);
-}
-
-void FlashLedService()
-{
-    // modeLedService = LED_FLASH;
-    // ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY));
-    // ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
-    // ledc_set_freq(LEDC_MODE, LEDC_TIMER_0, 5);
-}
-
-void BlinkLedInternet()
-{
-    // modeLedInternet = LED_BLINK;
-    // ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, LEDC_DUTY));
-    // ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1));
-    // ledc_set_freq(LEDC_MODE, LEDC_TIMER_1, 1);
-}
-
-void FlashLedInternet()
-{
-    // modeLedInternet = LED_FLASH;
-    // ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, LEDC_DUTY));
-    // ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1));
-    // ledc_set_freq(LEDC_MODE, LEDC_TIMER_1, 5);
-}
-
-int GetModeLedService()
-{
-    return modeLedService;
-}
-
-int GetModeLedInternet()
-{
-    return modeLedInternet;
-}
+// ----------------- Lấy trạng thái -----------------
+bool GetStatusLedService() { return statusLedService; }
+bool GetStatusLedInternet() { return statusLedInternet; }
+led_mode_t GetModeLedService() { return modeLedService; }
+led_mode_t GetModeLedInternet() { return modeLedInternet; }

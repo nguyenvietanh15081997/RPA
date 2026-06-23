@@ -91,7 +91,7 @@ void Udp::init()
 		if (xTaskCreate(UdpHandleMessage, "UdpHandleMessage", 10240, this, 10, NULL) != pdPASS)
 		{
 			LOGE("Failed to create task");
-			SetLedService(false);
+			// SetLedService(false);
 		}
 		vTaskDelay(10);
 #else

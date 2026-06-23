@@ -18,8 +18,8 @@
 #include "lwip/sys.h"
 #include "lwip/inet.h"
 
-#define SSID_DEFAULT "TTS"
-#define PASSWORD_DEFAULT "TTS123456"
+#define SSID_DEFAULT "RD_HC_7375"
+#define PASSWORD_DEFAULT "ABC123456"
 
 static esp_netif_t *ap = NULL;
 static esp_netif_t *sta = NULL;
