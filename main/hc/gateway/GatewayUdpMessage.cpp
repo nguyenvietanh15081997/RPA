@@ -387,14 +387,14 @@ int Gateway::OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue)
 	std::string cmd = "";
 	std::string ssid = "";
 	std::string rssi = "";
-	uint32_t type = 0;
+	std::string type = "";
 	std::string macBle = "";
 
 	JSON_GET_STR(data, "macWifi", macWifi);
 	JSON_GET_STR(data, "cmd", cmd);
 	JSON_GET_STR(data, "ssid", ssid);
 	JSON_GET_STR(data, "rssi", rssi);
-	JSON_GET_INT(data, "devType", type);
+	JSON_GET_STR(data, "devType", type);
 	JSON_GET_STR(data, "macBle", macBle);
 
 	LOGI("macWifi: %s", macWifi.c_str());
@@ -402,7 +402,7 @@ int Gateway::OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue)
 	LOGI("cmd    : %s", cmd.c_str());
 	LOGI("ssid   : %s", ssid.c_str());
 	LOGI("rssi   : %s", rssi.c_str());
-	LOGI("type   : %u", type);
+	LOGI("type   : %s", type);
 
 	ParseInfPCBA(macWifi, ssid, rssi, macBle, rssi, type);
 

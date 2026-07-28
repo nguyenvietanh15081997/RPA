@@ -116,6 +116,7 @@ public:
 
 	int Req_StartTest_BLEMesh(string mac);
 	int GetStatusConnectWifi(string mac);
+	int ControlRelayByUdp(string mac, bool on);
 
 
 	int StartTestPCBA();
@@ -123,4 +124,4 @@ public:
 
 extern Gateway *gateway;
 
-int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macBle, string s_rssiBle, uint32_t s_type);
+int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macBle, string s_rssiBle, string s_type);

@@ -412,6 +412,28 @@ int Gateway::GetStatusConnectWifi(string mac)
 	return SendBroadcast(message, bc_ip, Udp::port);
 }
 
+int Gateway::ControlRelayByUdp(string mac, bool on)
+{
+	Json::Value root;
+	Json::Value data;
+
+	root["process"] = "pcba";
+
+	data["btn_idx"] = 255;
+	data["cmd"] = "control";
+	data["type"] = "request";
+	data["state"] = on ? "on" : "off";
+	data["mac"] = mac;
+
+	root["data"] = data;
+
+	string message = root.toString();
+
+	string bc_ip = Wifi::GetBroadcastIP();
+
+	return SendBroadcast(message, bc_ip, Udp::port);
+}
+
 typedef struct __attribute__((packed))
 {
 	string macWifi;
@@ -419,7 +441,7 @@ typedef struct __attribute__((packed))
 	string rssiWf;
 	string macBle;
 	string rssiBle;
-	uint32_t type;
+	string type;
 	uint32_t addr;
 } wifi_inf_test_pcba_t;
 
@@ -429,7 +451,7 @@ uint8_t pos = 0;
 uint8_t stt_on_pos[4] = {0, 0, 0, 0};
 uint8_t stt_off_pos[4] = {0, 0, 0, 0};
 
-int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macBle, string s_rssiBle, uint32_t s_type)
+int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macBle, string s_rssiBle, string s_type)
 {
 	inf.macWifi = s_macWifi;
 	inf.ssid = s_ssid;
@@ -437,7 +459,9 @@ int ParseInfPCBA(string s_macWifi, string s_ssid, string s_rssiWf, string s_macB
 	inf.macBle = s_macBle;
 	inf.rssiBle = s_rssiBle;
 	inf.type = s_type;
-	inf.addr = ((uint16_t)std::stoul(inf.macBle.substr(inf.macBle.length() - 4), nullptr, 16)) & 0x7fff;
+	inf.addr = 0;
+	if (!s_macBle.empty())
+		inf.addr = ((uint16_t)std::stoul(inf.macBle.substr(inf.macBle.length() - 4), nullptr, 16)) & 0x7fff;
 	hasRspUDP = true;
 	return CODE_OK;
 }
@@ -449,7 +473,7 @@ int ResetInfPCBA()
 	inf.rssiWf = "";
 	inf.macBle = "";
 	inf.rssiBle = "";
-	inf.type = 0;
+	inf.type = "";
 	return CODE_OK;
 }
 
@@ -478,7 +502,7 @@ bool rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool
 	// rs["addr"] = qrProtocol->addr;
 	rs["version"] = "1.2";
 	rs["serial"] = inf.macWifi;
-	rs["deviceType"] = to_string(Json::UInt(inf.type));
+	rs["deviceType"] = inf.type;
 	// rs["rssi"] = checkRssi ? bleProtocol->rssi : 0;
 
 	rs["wifi"] = wifi_status;
@@ -617,52 +641,56 @@ int Gateway::StartTestPCBA()
 			}
 			else
 			{
-				Req_StartTest_BLEMesh("0");
-				SLEEP_MS(1000);
-				Req_StartTest_BLEMesh("0");
-				SLEEP_MS(1000);
+				// Req_StartTest_BLEMesh("0");
+				// SLEEP_MS(1000);
+				// Req_StartTest_BLEMesh("0");
+				// SLEEP_MS(1000);
 
-				if (inf.type == DEVICE_TYPE_SOCKET_1)
+				// if (inf.type == DEVICE_TYPE_SOCKET_1)
+				// {
+				// 	SetLedService(true);
+				// 	// TODO: Set button On
+				// 	int ble_status = bleProtocol->RPA_Test_Socket(0xffff, 1, 1, 1); // ble_status = CODE_OK -> button OK
+				// 	SLEEP_MS(2000);
+				// 	int lv1 = GpioGetLevel(GPIO_NUM_14);
+				// 	int lv2 = GpioGetLevel(GPIO_NUM_26);
+				// 	int lv3 = GpioGetLevel(GPIO_NUM_27);
+
+				// 	// TODO: Read stt Relay + led
+
+				// 	// TODO: Set button On
+				// 	SetLedService(false);
+				// 	ble_status = bleProtocol->RPA_Test_Socket(0xffff, 0, 0, 0); // ble_status = CODE_OK -> button OK
+				// 	SLEEP_MS(2000);
+				// 	lv1 = GpioGetLevel(GPIO_NUM_14);
+				// 	lv2 = GpioGetLevel(GPIO_NUM_26);
+				// 	lv3 = GpioGetLevel(GPIO_NUM_27);
+
+				// 	// TODO: Read stt Relay + led
+				// }
+				// else 
+				if (inf.type == "CTCU_WIFI_3" || inf.type == "CTCU_WIFI_2" || inf.type == "CTCU_WIFI_1")
 				{
-					SetLedService(true);
-					// TODO: Set button On
-					int ble_status = bleProtocol->RPA_Test_Socket(0xffff, 1, 1, 1); // ble_status = CODE_OK -> button OK
-					SLEEP_MS(2000);
-					int lv1 = GpioGetLevel(GPIO_NUM_14);
-					int lv2 = GpioGetLevel(GPIO_NUM_26);
-					int lv3 = GpioGetLevel(GPIO_NUM_27);
-
-					// TODO: Read stt Relay + led
-
-					// TODO: Set button On
-					SetLedService(false);
-					ble_status = bleProtocol->RPA_Test_Socket(0xffff, 0, 0, 0); // ble_status = CODE_OK -> button OK
-					SLEEP_MS(2000);
-					lv1 = GpioGetLevel(GPIO_NUM_14);
-					lv2 = GpioGetLevel(GPIO_NUM_26);
-					lv3 = GpioGetLevel(GPIO_NUM_27);
-
-					// TODO: Read stt Relay + led
-				}
-				else if (inf.type == DEVICE_TYPE_SWITCH_1 || inf.type == DEVICE_TYPE_SWITCH_2 || inf.type == DEVICE_TYPE_SWITCH_3 || inf.type == DEVICE_TYPE_SWITCH_4)
-				{
-					int ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 1);
-					SLEEP_MS(1500);
+					// int ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 1);
+					ControlRelayByUdp(inf.macWifi, true);
+					SLEEP_MS(3000);
 					for (int j = 0; j < 3; j++)
 					{
 						stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
 						LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
 					}
 
-					ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 0);
-					SLEEP_MS(1500);
+					// ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 0);
+					ControlRelayByUdp(inf.macWifi, false);
+					SLEEP_MS(3000);
 					for (int j = 0; j < 3; j++)
 					{
 						stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
 						LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
 					}
 
-					if (!rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false))
+					// if (!rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false))
+					if (!rd_reporting_proc_ctcu(3, i, true, true))
 						checkRs = false;
 				}
 				else

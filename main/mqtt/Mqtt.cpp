@@ -57,6 +57,7 @@ Mqtt::Mqtt(string host, int port, string clientId, string username, string passw
 
 void Mqtt::init()
 {
+	LOGE("host: %s, port: %d, client: %s, username: %s, pw: %s", host.c_str(), port, clientId.c_str(), username.c_str(), password.c_str());
 	esp_mqtt_client_config_t mqtt_cfg = {0};
 	// mqtt_cfg.broker.address.uri = host.c_str();
 	mqtt_cfg.broker.address.hostname = host.c_str();

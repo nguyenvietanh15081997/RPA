@@ -18,8 +18,8 @@
 #include "lwip/sys.h"
 #include "lwip/inet.h"
 
-#define SSID_DEFAULT "RD_HC_7375"
-#define PASSWORD_DEFAULT "ABC123456"
+#define SSID_DEFAULT "WIFI_TEST"
+#define PASSWORD_DEFAULT "Ral@2804"
 
 static esp_netif_t *ap = NULL;
 static esp_netif_t *sta = NULL;
@@ -338,24 +338,23 @@ string Wifi::GetMacAddressHasDot()
 	return string(uc_Mac);
 }
 
+
 string Wifi::GetIP()
 {
-	// LOGD("GetIP");
-	char ip[32] = "10.10.10.1";
-	esp_netif_t *netif = NULL;
-	esp_netif_ip_info_t ip_info;
-	for (int i = 0; i < esp_netif_get_nr_of_ifs(); ++i)
-	{
-		netif = esp_netif_next(netif);
-		ESP_ERROR_CHECK(esp_netif_get_ip_info(netif, &ip_info));
-		if (ip_info.ip.addr != 0 && ip_info.ip.addr != 0x010A0A0A) // 10.10.10.1
-		{
-			sprintf(ip, IPSTR, IP2STR(&ip_info.ip));
-			break;
-		}
-	}
-	LOGI("ip: %s", ip);
-	return string(ip);
+    char ip[32] = "10.10.10.1";
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+
+    if (netif != NULL)
+    {
+        esp_netif_ip_info_t ip_info;
+        if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0)
+        {
+            sprintf(ip, IPSTR, IP2STR(&ip_info.ip));
+        }
+    }
+
+    LOGI("ip: %s", ip);
+    return string(ip);
 }
 
 string Wifi::GetBroadcastIP()
