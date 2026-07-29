@@ -535,7 +535,7 @@ bool rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool
 		rs["offRelay4"] = (stt_off_pos[3]) ? false : true;
 	}
 
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < num_ele; i++)
 	{
 		if (stt_on_pos[i] == 0)
 		{
@@ -623,7 +623,7 @@ int Gateway::StartTestPCBA()
 		{
 			ResetInfPCBA();
 			SetPowerOnPos(i);
-			SLEEP_MS(5000);
+			SLEEP_MS(10000);
 
 			uint8_t count = 10;
 			hasRspUDP = false;
@@ -668,13 +668,22 @@ int Gateway::StartTestPCBA()
 
 				// 	// TODO: Read stt Relay + led
 				// }
-				// else 
+				// else
 				if (inf.type == "CTCU_WIFI_3" || inf.type == "CTCU_WIFI_2" || inf.type == "CTCU_WIFI_1")
 				{
+					int element = 0;
+					if (inf.type == "CTCU_WIFI_3")
+						element = 3;
+					else if (inf.type == "CTCU_WIFI_2")
+						element = 2;
+					else if (inf.type == "CTCU_WIFI_1")
+						element = 1;
 					// int ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 1);
 					ControlRelayByUdp(inf.macWifi, true);
-					SLEEP_MS(3000);
-					for (int j = 0; j < 3; j++)
+					SLEEP_MS(2000);
+					ControlRelayByUdp(inf.macWifi, true);
+					SLEEP_MS(2000);
+					for (int j = 0; j < element; j++)
 					{
 						stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
 						LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
@@ -682,15 +691,17 @@ int Gateway::StartTestPCBA()
 
 					// ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 0);
 					ControlRelayByUdp(inf.macWifi, false);
-					SLEEP_MS(3000);
-					for (int j = 0; j < 3; j++)
+					SLEEP_MS(2000);
+					ControlRelayByUdp(inf.macWifi, false);
+					SLEEP_MS(2000);
+					for (int j = 0; j < element; j++)
 					{
 						stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
 						LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
 					}
 
 					// if (!rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false))
-					if (!rd_reporting_proc_ctcu(3, i, true, true))
+					if (!rd_reporting_proc_ctcu(element, i, true, true))
 						checkRs = false;
 				}
 				else
@@ -711,7 +722,6 @@ int Gateway::StartTestPCBA()
 	}
 	else
 	{
-		LOGE("BUTTON OFF");
 	}
 	return CODE_OK;
 }

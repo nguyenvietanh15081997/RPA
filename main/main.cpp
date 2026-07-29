@@ -94,7 +94,7 @@ extern "C" void app_main(void)
 	int port = 1883;
 	string clientId = mac;
 	string username = "RD";
-	string password = "DD7443285C99DCC2F6F41509C010EC3C5747D71D4FC5CAB9E99826C605653187";
+	string password = "6B786AF22BC484FB00E23AAD5B5DB4195747D71D4FC5CAB9E99826C605653187";
 	int keepAlive = 120;
 
 	
