@@ -42,6 +42,7 @@ Gateway::Gateway(string mac, string address, int port, string clientId, string u
 	this->ble_appkey = "";
 	this->ble_devicekey = "";
 	this->data = "";
+	this->hasRspConfigMqtt = false;
 }
 
 Gateway::~Gateway()
@@ -412,6 +413,41 @@ int Gateway::GetStatusConnectWifi(string mac)
 	return SendBroadcast(message, bc_ip, Udp::port);
 }
 
+int Gateway::SetMqttPassword(string mac, string password)
+{
+/*
+"process":"pcba",
+"data":
+{
+  "cmd": "configMqtt",
+  "type": "request",
+  "mac": "xxxxxx",
+
+  "host": "host.eaut.edu.vn",
+  "port": 1883,
+  "clientId": "rd_xxxxxx",
+  "username": "rd_xxxxxx",
+  "password" : "xxxxxx",
+}
+*/
+	Json::Value data;
+	data["process"] = "pcba";
+	Json::Value info;
+	info["cmd"] = "configMqtt";
+	info["type"] = "request";
+	info["mac"] = mac;
+	info["host"] = "iot.eaut.edu.vn";
+	info["port"] = 8883;
+	info["clientId"] = "rd_" + mac;
+	info["username"] = "rd_" + mac;
+	info["password"] = password;
+	data["data"] = info;
+
+	string message = data.toString();
+	string bc_ip = Wifi::GetBroadcastIP();
+	return SendBroadcast(message, bc_ip, Udp::port);
+}
+
 int Gateway::ControlRelayByUdp(string mac, bool on)
 {
 	Json::Value root;
@@ -494,12 +530,13 @@ int ResetInfPCBA()
 // 	return addr;
 // }
 
-bool rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool ble_status)
+bool rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool ble_status, string password)
 {
 	Json::Value rs;
 	bool checkRs = true;
 	// rs["mac"] = qrProtocol->mac;
 	// rs["addr"] = qrProtocol->addr;
+	rs["passMqtt"] = password;
 	rs["version"] = "1.2";
 	rs["serial"] = inf.macWifi;
 	rs["deviceType"] = inf.type;
@@ -600,7 +637,7 @@ int Gateway::TestSwitch()
 	ButtonInit();
 	while (1)
 	{
-		LOGI("TestSwitch");
+		// LOGI("TestSwitch");
 		StartTestPCBA();
 		sleep(1);
 	}
@@ -669,6 +706,15 @@ int Gateway::StartTestPCBA()
 				// 	// TODO: Read stt Relay + led
 				// }
 				// else
+				hasRspConfigMqtt = false;
+				uint8_t count1 = 3;
+				string password = Util::genRandRQI(16);
+				while(!hasRspConfigMqtt && count1)
+				{
+					SetMqttPassword(inf.macWifi, password);
+					SLEEP_MS(1000);
+					count1--;
+				}
 				if (inf.type == "CTCU_WIFI_3" || inf.type == "CTCU_WIFI_2" || inf.type == "CTCU_WIFI_1")
 				{
 					int element = 0;
@@ -701,7 +747,7 @@ int Gateway::StartTestPCBA()
 					}
 
 					// if (!rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false))
-					if (!rd_reporting_proc_ctcu(element, i, true, true))
+					if (!rd_reporting_proc_ctcu(element, i, true, true, password))
 						checkRs = false;
 				}
 				else

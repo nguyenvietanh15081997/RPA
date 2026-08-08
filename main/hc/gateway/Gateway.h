@@ -58,9 +58,13 @@ private:
 	int OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue);
 	int OnPCBA_StartTestBLE(Json::Value &reqValue, Json::Value &respValue);
 	int OnRPA_GetInfo(Json::Value &reqValue, Json::Value &respValue);
+	int OnPCBA_ConfigMqtt(Json::Value &reqValue, Json::Value &respValue);
+	int SetMqttPassword(string mac, string password);
 
 
 public:
+	bool hasRspConfigMqtt;
+
 	Gateway(string mac, string address, int port, string clientId, string username, string password, int keepalive, string localAddress = "localhost", int localPort = 1883, string localUsername = "", string localPassword = "", int localKeepalive = 10);
 	~Gateway();
 	void init();

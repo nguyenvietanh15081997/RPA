@@ -38,6 +38,7 @@ void Gateway::InitUdpMessage()
 	UdpCmdCallbackRegister("scanIpHc", bind(&Gateway::OnScanIpHc, this, placeholders::_1, placeholders::_2));
 
 	UdpCmdCallbackRegister("wifiReport", bind(&Gateway::OnPCBA_GetInfo, this, placeholders::_1, placeholders::_2));
+	UdpCmdCallbackRegister("configMqtt", bind(&Gateway::OnPCBA_ConfigMqtt, this, placeholders::_1, placeholders::_2));
 }
 
 int Gateway::OnUdpScanHc(Json::Value &reqValue, Json::Value &respValue)
@@ -406,5 +407,12 @@ int Gateway::OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue)
 
 	ParseInfPCBA(macWifi, ssid, rssi, macBle, rssi, type);
 
+	return CODE_NOT_RESPONSE;
+}
+
+int Gateway::OnPCBA_ConfigMqtt(Json::Value &reqValue, Json::Value &respValue)
+{
+	LOGD("OnPCBA_ConfigMqtt");
+	hasRspConfigMqtt = true;
 	return CODE_NOT_RESPONSE;
 }
