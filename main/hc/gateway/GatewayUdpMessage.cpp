@@ -17,15 +17,14 @@
 		}                                                   \
 	} while (0)
 
-#define JSON_GET_INT(json, key, var)                        \
-	do                                                      \
-	{                                                       \
+#define JSON_GET_INT(json, key, var)                     \
+	do                                                   \
+	{                                                    \
 		if ((json).isMember(key) && (json)[key].isInt()) \
-		{                                                   \
+		{                                                \
 			var = (json)[key].asInt();                   \
-		}                                                   \
+		}                                                \
 	} while (0)
-
 
 void Gateway::InitUdpMessage()
 {
@@ -38,6 +37,8 @@ void Gateway::InitUdpMessage()
 	UdpCmdCallbackRegister("scanIpHc", bind(&Gateway::OnScanIpHc, this, placeholders::_1, placeholders::_2));
 
 	UdpCmdCallbackRegister("wifiReport", bind(&Gateway::OnPCBA_GetInfo, this, placeholders::_1, placeholders::_2));
+	UdpCmdCallbackRegister("positionDevice", bind(&Gateway::OnPCBA_PositionDevice, this, placeholders::_1, placeholders::_2));
+	UdpCmdCallbackRegister("setTypeDeviceTest", bind(&Gateway::OnPCBA_SetTypeDeviceTest, this, placeholders::_1, placeholders::_2));
 }
 
 int Gateway::OnUdpScanHc(Json::Value &reqValue, Json::Value &respValue)
@@ -405,6 +406,65 @@ int Gateway::OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue)
 	LOGI("type   : %u", type);
 
 	ParseInfPCBA(macWifi, ssid, rssi, macBle, rssi, type);
+
+	return CODE_NOT_RESPONSE;
+}
+
+int Gateway::OnPCBA_PositionDevice(Json::Value &reqValue, Json::Value &respValue)
+{
+	LOGD("OnPCBA_PositionDevice");
+
+	if (!reqValue.isMember("data") || !reqValue["data"].isObject())
+	{
+		LOGE("Invalid data");
+		return CODE_NOT_RESPONSE;
+	}
+
+	Json::Value data = reqValue["data"];
+
+	std::string mac = "";
+	int position = -1;
+
+	JSON_GET_STR(data, "mac", mac);
+	JSON_GET_INT(data, "pos", position);
+	for (char &c : mac)
+	{
+		if (c >= 'A' && c <= 'F')
+		{
+			c = c + ('a' - 'A');
+		}
+	}
+
+	LOGI("mac: %s", mac.c_str());
+	LOGI("pos: %d", position);
+
+	if (position >= 0 && position <= 2)
+	{
+		this->listMactest[position] = mac;
+	}
+
+	return CODE_NOT_RESPONSE;
+}
+
+int Gateway::OnPCBA_SetTypeDeviceTest(Json::Value &reqValue, Json::Value &respValue)
+{
+	LOGD("OnPCBA_SetTypeDeviceTest");
+
+	if (!reqValue.isMember("data") || !reqValue["data"].isObject())
+	{
+		LOGE("Invalid data");
+		return CODE_NOT_RESPONSE;
+	}
+
+	Json::Value data = reqValue["data"];
+
+	uint16_t typedev = 0;
+
+	JSON_GET_INT(data, "typeDevice", typedev);
+
+	LOGI("typeDevice: %d", typedev);
+
+	this->typedevTest = typedev;
 
 	return CODE_NOT_RESPONSE;
 }

@@ -58,9 +58,14 @@ private:
 	int OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue);
 	int OnPCBA_StartTestBLE(Json::Value &reqValue, Json::Value &respValue);
 	int OnRPA_GetInfo(Json::Value &reqValue, Json::Value &respValue);
+	int OnPCBA_PositionDevice(Json::Value &reqValue, Json::Value &respValue);
+	int OnPCBA_SetTypeDeviceTest(Json::Value &reqValue, Json::Value &respValue);
 
 
 public:
+	string listMactest[3];
+	uint16_t typedevTest;
+
 	Gateway(string mac, string address, int port, string clientId, string username, string password, int keepalive, string localAddress = "localhost", int localPort = 1883, string localUsername = "", string localPassword = "", int localKeepalive = 10);
 	~Gateway();
 	void init();
@@ -70,6 +75,7 @@ public:
 
 	int RestartBleGw();
 	int TestSwitch();
+	int Checkbutton();
 
 
 	Device *getDeviceFromMac(string mac);

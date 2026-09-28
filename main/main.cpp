@@ -90,11 +90,11 @@ extern "C" void app_main(void)
 	// gpioProtocol->gpio_init();
 	
 	string mac = Wifi::GetMacAddressHasDot();
-	string host = "10.10.10.1";
+	string host = "192.168.10.153";
 	int port = 1883;
 	string clientId = mac;
 	string username = "RD";
-	string password = "DD7443285C99DCC2F6F41509C010EC3C5747D71D4FC5CAB9E99826C605653187";
+	string password = "1";
 	int keepAlive = 120;
 
 	

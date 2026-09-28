@@ -19,7 +19,7 @@ uint8_t i2c_read_bytes(uint8_t *data, size_t len, uint8_t slave_addr);
 uint8_t i2c_read_register(uint8_t target_index, uint8_t slave_addr);
 
 uint8_t GetSttGroupRelayPos(uint8_t pos);
-void SetPowerOnPos(uint8_t pos);
+void SetPowerOnPos(uint8_t pos, bool test);
 #ifdef __cplusplus
 }
 #endif

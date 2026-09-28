@@ -56,6 +56,13 @@ static void TestSwitchThread(void *data)
 	gateway->TestSwitch();
 	vTaskDelete(NULL);
 }
+
+static void CheckbuttonThread(void *data)
+{
+	Gateway *gateway = (Gateway *)data;
+	gateway->Checkbutton();
+	vTaskDelete(NULL);
+}
 #endif
 
 void Gateway::init()
@@ -82,9 +89,15 @@ void Gateway::init()
 		// SetLedService(false);
 	}
 	vTaskDelay(10);
+
+	LOGI("Free memory: %d bytes, internal: %d bytes", esp_get_free_heap_size(), esp_get_free_internal_heap_size());
+	if (xTaskCreate(CheckbuttonThread, "checkbuttonThread", 5120, this, 7, NULL) != pdPASS)
+	{
+		LOGE("Failed to create task");
+		// SetLedService(false);
+	}
+	vTaskDelay(10);
 #else
-	thread testSwitchThread(bind(&Gateway::TestSwitch, this));
-	testSwitchThread.detach();
 #endif
 	// LocalConnect();
 	CloudConnect();
@@ -576,12 +589,79 @@ int Gateway::TestSwitch()
 	ButtonInit();
 	while (1)
 	{
-		LOGI("TestSwitch");
+		// LOGI("TestSwitch");
 		StartTestPCBA();
-		sleep(1);
+		SLEEP_MS(1000);
 	}
 }
 
+static bool testingSw = false;
+static bool powerOnSw = false;
+
+int Gateway::Checkbutton()
+{
+    bool button_pressed = false;
+    time_t press_start_time = 0;
+
+    while (1)
+    {
+        int current_state_bt = GpioGetLevel(GPIO_NUM_13);
+        // Button được nhấn
+        if (current_state_bt == 0)
+        {
+            // Phát hiện bắt đầu nhấn
+            if (!button_pressed)
+            {
+                button_pressed = true;
+                press_start_time = time(NULL);
+
+                printf("Button pressed\n");
+            }
+
+            // Button đang được giữ
+            time_t current_time = time(NULL);
+
+            if ((current_time - press_start_time) >= 5)
+            {
+                testingSw = true;
+
+                printf("Long press >= 5s\n");
+
+                // Chờ nhả nút để không trigger lại
+                while (GpioGetLevel(GPIO_NUM_13) == 0)
+                {
+                    SLEEP_MS(100);
+                }
+
+                button_pressed = false;
+            }
+        }
+        else
+        {
+            // Button vừa được nhả
+            if (button_pressed)
+            {
+                time_t release_time = time(NULL);
+                time_t press_duration = release_time - press_start_time;
+
+                if (press_duration < 5)
+                {
+                    powerOnSw = true;
+
+                    printf("Short press < 5s\n");
+                }
+
+                button_pressed = false;
+            }
+        }
+
+        SLEEP_MS(500);
+    }
+
+    return 0;
+}
+
+int indexPowerOn = 0;
 int Gateway::StartTestPCBA()
 {
 	// SetPowerOnPos(1);
@@ -589,23 +669,33 @@ int Gateway::StartTestPCBA()
 	// {
 	// 	GetSttGroupRelayPos(i);
 	// }
-	if (GpioGetLevel(GPIO_NUM_13) == 0)
+	if (powerOnSw)
 	{
-		LOGE("BUTTON ON");
+		powerOnSw = false;
+		LOGE("----------------> POWERON <---------------");
+		if (indexPowerOn > 2)
+			indexPowerOn = 0;
+		SetPowerOnPos(indexPowerOn, false);
+		indexPowerOn++;
+	}
+	if (testingSw)
+	{
+		testingSw = false;
+		LOGE("----------------> TEST <---------------");
 		BlinkLedService();
 
 		bool checkRs = true;
 		for (int i = 0; i < 3; i++)
 		{
 			ResetInfPCBA();
-			SetPowerOnPos(i);
+			SetPowerOnPos(i, true);
 			SLEEP_MS(5000);
 
 			uint8_t count = 10;
 			hasRspUDP = false;
 			while (!hasRspUDP && count)
 			{
-				GetStatusConnectWifi("0");
+				GetStatusConnectWifi(listMactest[i]);
 				SLEEP_MS(1000);
 				count--;
 			}
@@ -617,9 +707,9 @@ int Gateway::StartTestPCBA()
 			}
 			else
 			{
-				Req_StartTest_BLEMesh("0");
+				Req_StartTest_BLEMesh(listMactest[i]);
 				SLEEP_MS(1000);
-				Req_StartTest_BLEMesh("0");
+				Req_StartTest_BLEMesh(listMactest[i]);
 				SLEEP_MS(1000);
 
 				if (inf.type == DEVICE_TYPE_SOCKET_1)
@@ -646,6 +736,16 @@ int Gateway::StartTestPCBA()
 				}
 				else if (inf.type == DEVICE_TYPE_SWITCH_1 || inf.type == DEVICE_TYPE_SWITCH_2 || inf.type == DEVICE_TYPE_SWITCH_3 || inf.type == DEVICE_TYPE_SWITCH_4)
 				{
+					int element = 0;
+					if (inf.type == DEVICE_TYPE_SWITCH_1)
+						element = 1;
+					else if (inf.type == DEVICE_TYPE_SWITCH_2)
+						element = 2;
+					else if (inf.type == DEVICE_TYPE_SWITCH_3)
+						element = 3;
+					else if (inf.type == DEVICE_TYPE_SWITCH_4)
+						element = 4;
+
 					int ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 1);
 					SLEEP_MS(1500);
 					for (int j = 0; j < 3; j++)
@@ -662,7 +762,7 @@ int Gateway::StartTestPCBA()
 						LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
 					}
 
-					if (!rd_reporting_proc_ctcu(3, i, true, ble_status == CODE_OK ? true : false))
+					if (!rd_reporting_proc_ctcu(element, i, true, ble_status == CODE_OK ? true : false))
 						checkRs = false;
 				}
 				else
@@ -680,10 +780,6 @@ int Gateway::StartTestPCBA()
 		{
 			FlashLedService();
 		}
-	}
-	else
-	{
-		LOGE("BUTTON OFF");
 	}
 	return CODE_OK;
 }
