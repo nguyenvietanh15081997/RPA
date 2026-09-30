@@ -63,7 +63,6 @@ private:
 
 
 public:
-	string listMactest[3];
 	uint16_t typedevTest;
 
 	Gateway(string mac, string address, int port, string clientId, string username, string password, int keepalive, string localAddress = "localhost", int localPort = 1883, string localUsername = "", string localPassword = "", int localKeepalive = 10);

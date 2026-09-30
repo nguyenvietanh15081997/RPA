@@ -276,6 +276,7 @@ private:
 	} ble_message_header_t;
 
 	vector<message_rsp_list_st *> messageRespList;
+	mutex mtxMessageRespList;
 	mutex mtxWaitSendUart;
 
 #define BLE_CHECK_OPCODE_BUFFER_MAX_SIZE 500
@@ -295,6 +296,7 @@ private:
 
 public:
 	int rssi;
+	string macBle;
 	bool isMatchMac;
 	atomic<bool> haveNewMac;
 	atomic<bool> haveGetMacRsp;
@@ -302,6 +304,8 @@ public:
 	atomic<bool> isInitKey;
 	scan_device_message_t scanDeviceMessage;
 	scan_device_pair_message_t scanDevicePairMessage;
+
+	string listMactest[3];
 
 #ifdef ESP_PLATFORM
 	BleProtocol(uart_port_t num, int txPin, int rxPin, int baudrate);

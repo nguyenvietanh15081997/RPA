@@ -499,7 +499,7 @@ bool rd_reporting_proc_ctcu(uint8_t num_ele, uint8_t pos, bool wifi_status, bool
 	rs["wifiRssi"] = inf.rssiWf;
 	rs["bluetooth"] = ble_status;
 	rs["bluetoothMac"] = inf.macBle;
-	rs["bluetoothRssi"] = inf.rssiBle;
+	rs["bluetoothRssi"] = bleProtocol->rssi;
 
 	if (!wifi_status | !ble_status)
 		checkRs = false;
@@ -600,65 +600,65 @@ static bool powerOnSw = false;
 
 int Gateway::Checkbutton()
 {
-    bool button_pressed = false;
-    time_t press_start_time = 0;
+	bool button_pressed = false;
+	time_t press_start_time = 0;
 
-    while (1)
-    {
-        int current_state_bt = GpioGetLevel(GPIO_NUM_13);
-        // Button được nhấn
-        if (current_state_bt == 0)
-        {
-            // Phát hiện bắt đầu nhấn
-            if (!button_pressed)
-            {
-                button_pressed = true;
-                press_start_time = time(NULL);
+	while (1)
+	{
+		int current_state_bt = GpioGetLevel(GPIO_NUM_13);
+		// Button được nhấn
+		if (current_state_bt == 0)
+		{
+			// Phát hiện bắt đầu nhấn
+			if (!button_pressed)
+			{
+				button_pressed = true;
+				press_start_time = time(NULL);
 
-                printf("Button pressed\n");
-            }
+				printf("Button pressed\n");
+			}
 
-            // Button đang được giữ
-            time_t current_time = time(NULL);
+			// Button đang được giữ
+			time_t current_time = time(NULL);
 
-            if ((current_time - press_start_time) >= 5)
-            {
-                testingSw = true;
+			if ((current_time - press_start_time) >= 5)
+			{
+				testingSw = true;
 
-                printf("Long press >= 5s\n");
+				printf("Long press >= 5s\n");
 
-                // Chờ nhả nút để không trigger lại
-                while (GpioGetLevel(GPIO_NUM_13) == 0)
-                {
-                    SLEEP_MS(100);
-                }
+				// Chờ nhả nút để không trigger lại
+				while (GpioGetLevel(GPIO_NUM_13) == 0)
+				{
+					SLEEP_MS(100);
+				}
 
-                button_pressed = false;
-            }
-        }
-        else
-        {
-            // Button vừa được nhả
-            if (button_pressed)
-            {
-                time_t release_time = time(NULL);
-                time_t press_duration = release_time - press_start_time;
+				button_pressed = false;
+			}
+		}
+		else
+		{
+			// Button vừa được nhả
+			if (button_pressed)
+			{
+				time_t release_time = time(NULL);
+				time_t press_duration = release_time - press_start_time;
 
-                if (press_duration < 5)
-                {
-                    powerOnSw = true;
+				if (press_duration < 5)
+				{
+					powerOnSw = true;
 
-                    printf("Short press < 5s\n");
-                }
+					printf("Short press < 5s\n");
+				}
 
-                button_pressed = false;
-            }
-        }
+				button_pressed = false;
+			}
+		}
 
-        SLEEP_MS(500);
-    }
+		SLEEP_MS(500);
+	}
 
-    return 0;
+	return 0;
 }
 
 int indexPowerOn = 0;
@@ -669,6 +669,8 @@ int Gateway::StartTestPCBA()
 	// {
 	// 	GetSttGroupRelayPos(i);
 	// }
+	// bleProtocol->listMactest[0] = "10003bb5a0e4";
+	// bleProtocol->listMactest[1] = "10003bb59c24";
 	if (powerOnSw)
 	{
 		powerOnSw = false;
@@ -695,7 +697,7 @@ int Gateway::StartTestPCBA()
 			hasRspUDP = false;
 			while (!hasRspUDP && count)
 			{
-				GetStatusConnectWifi(listMactest[i]);
+				GetStatusConnectWifi(bleProtocol->listMactest[i]);
 				SLEEP_MS(1000);
 				count--;
 			}
@@ -707,9 +709,19 @@ int Gateway::StartTestPCBA()
 			}
 			else
 			{
-				Req_StartTest_BLEMesh(listMactest[i]);
+				bleProtocol->SetProvisioning(true);
+				bleProtocol->StartScan();
+				uint8_t count1 = 10;
+				while (count1)
+				{
+					SLEEP_MS(1000);
+					count1--;
+				}
+				bleProtocol->StopScan();
+
+				Req_StartTest_BLEMesh(bleProtocol->listMactest[i]);
 				SLEEP_MS(1000);
-				Req_StartTest_BLEMesh(listMactest[i]);
+				Req_StartTest_BLEMesh(bleProtocol->listMactest[i]);
 				SLEEP_MS(1000);
 
 				if (inf.type == DEVICE_TYPE_SOCKET_1)
@@ -747,20 +759,26 @@ int Gateway::StartTestPCBA()
 						element = 4;
 
 					int ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 1);
-					SLEEP_MS(1500);
-					for (int j = 0; j < 3; j++)
-					{
-						stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
-						LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
-					}
+					SLEEP_MS(2000);
+					// for (int h = 0; h < 2; h++)
+					// {
+						for (int j = 0; j < 3; j++)
+						{
+							stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
+							LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
+						}
+					// }	
 
 					ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 0);
-					SLEEP_MS(1500);
-					for (int j = 0; j < 3; j++)
-					{
-						stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
-						LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
-					}
+					SLEEP_MS(2000);
+					// for (int h = 0; h < 2; h++)
+					// {
+						for (int j = 0; j < 3; j++)
+						{
+							stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
+							LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
+						}
+					// }	
 
 					if (!rd_reporting_proc_ctcu(element, i, true, ble_status == CODE_OK ? true : false))
 						checkRs = false;

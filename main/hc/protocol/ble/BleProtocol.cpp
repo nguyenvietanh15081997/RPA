@@ -33,6 +33,7 @@ BleProtocol::BleProtocol(char *uartPort, int baudrate) : Uart(uartPort, baudrate
 	isProvisioning = false;
 	isInitKey = false;
 	isMatchMac = false;
+	rssi = 0;
 }
 
 BleProtocol::~BleProtocol()
@@ -286,21 +287,24 @@ void BleProtocol::CheckOpcodeException(message_rsp_st *message_rsp)
 	switch (message_rsp->opcode)
 	{
 	case HCI_GATEWAY_CMD_UPDATE_MAC:
-		// if (IsProvision() && !haveNewMac)
+		if (IsProvision() && !haveNewMac)
 		{
 			memcpy(&scanDeviceMessage, message_rsp->data, sizeof(scan_device_message_t));
 			haveNewMac = true;
 			haveGetMacRsp = false;
 			string macGet = Util::ConvertU32ToHexString(&scanDeviceMessage.mac[0], 6);
-			// LOGE("ble:mac %s", macGet.c_str());
 			string macRev = reverseMac(macGet);
+			LOGE("ble:mac %s", macRev.c_str());
+			rssi = 0;
+			if (macRev == macBle)
+				rssi = scanDeviceMessage.rssi;
 			// LOGE("ble:mac rev %s", macRev.c_str());
-			if (qrProtocol->mac != "" && macRev == qrProtocol->mac)
-			{
-				isMatchMac = true;
-				this->rssi = scanDeviceMessage.rssi;
-				// LOGE("ble:rssi %d", this->rssi);
-			}
+			// if (qrProtocol->mac != "" && macRev == qrProtocol->mac)
+			// {
+			// 	isMatchMac = true;
+			// 	this->rssi = scanDeviceMessage.rssi;
+			// 	// LOGE("ble:rssi %d", this->rssi);
+			// }
 		}
 		break;
 
@@ -357,87 +361,89 @@ int BleProtocol::OnMessage(unsigned char *data, int len)
 				message_rsp->magic == 0x92 ||
 				message_rsp->magic == 0xfa)
 			{
-				// if (haveGetMacRsp || (!haveGetMacRsp && message_rsp->opcode != HCI_GATEWAY_CMD_UPDATE_MAC))
-				// {
-				uint16_t packageLen = message_rsp->len + 2;
-				is_dupplicate = false;
-				if (old_message_rsp && message_rsp->len == old_message_rsp->len)
+				if (haveGetMacRsp || (!haveGetMacRsp && message_rsp->opcode != HCI_GATEWAY_CMD_UPDATE_MAC))
 				{
-					is_dupplicate = true;
-					for (int i = 0; i < message_rsp->len; i++)
+					uint16_t packageLen = message_rsp->len + 2;
+					is_dupplicate = false;
+					if (old_message_rsp && message_rsp->len == old_message_rsp->len)
 					{
-						if (message_rsp->data[i] != old_message_rsp->data[i])
+						is_dupplicate = true;
+						for (int i = 0; i < message_rsp->len; i++)
 						{
-							is_dupplicate = false;
-							break;
+							if (message_rsp->data[i] != old_message_rsp->data[i])
+							{
+								is_dupplicate = false;
+								break;
+							}
 						}
 					}
-				}
-				if (!is_dupplicate)
-				{
-					if (message_rsp->len >= 3 && message_rsp->len <= l - 2)
+					if (!is_dupplicate)
 					{
-						// LOGD("onMessage opcode: 0x%02X, len: %d", message_rsp->opcode, message_rsp->len);
-						for (auto &messageResp : messageRespList)
+						if (message_rsp->len >= 3 && message_rsp->len <= l - 2)
 						{
-							if (message_rsp->opcode == messageResp->opcode)
+							// LOGD("onMessage opcode: 0x%02X, len: %d", message_rsp->opcode, message_rsp->len);
+							mtxMessageRespList.lock();
+							for (auto &messageResp : messageRespList)
 							{
-								match = true;
-								if (messageResp->compare_data)
+								if (message_rsp->opcode == messageResp->opcode)
 								{
-									for (int i = 0; i < messageResp->compare_len; i++)
+									match = true;
+									if (messageResp->compare_data)
 									{
-										if (message_rsp->data[messageResp->compare_position + i] != messageResp->compare_data[i])
-											match = false;
+										for (int i = 0; i < messageResp->compare_len; i++)
+										{
+											if (message_rsp->data[messageResp->compare_position + i] != messageResp->compare_data[i])
+												match = false;
+										}
 									}
-								}
-								if (match)
-								{
-									messageResp->status = true;
-									if (messageResp->len)
+									if (match)
 									{
-										*(messageResp->len) = message_rsp->len - 2;
-										if (*(messageResp->len) > 0)
-											if (messageResp->data)
-												memcpy(messageResp->data, message_rsp->data, *messageResp->len);
+										messageResp->status = true;
+										if (messageResp->len)
+										{
+											*(messageResp->len) = message_rsp->len - 2;
+											if (*(messageResp->len) > 0)
+												if (messageResp->data)
+													memcpy(messageResp->data, message_rsp->data, *messageResp->len);
+										}
 									}
 								}
 							}
-						}
-						vectorCheckOpcodeMtx.lock();
-						if (messageCheckOpcodeList.size() < BLE_CHECK_OPCODE_BUFFER_MAX_SIZE)
-						{
+							mtxMessageRespList.unlock();
+							vectorCheckOpcodeMtx.lock();
+							if (messageCheckOpcodeList.size() < BLE_CHECK_OPCODE_BUFFER_MAX_SIZE)
+							{
 #ifdef ESP_PLATFORM
-							message_rsp_st *messageCheckOpcode = (message_rsp_st *)heap_caps_malloc_prefer(packageLen, 2, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+								message_rsp_st *messageCheckOpcode = (message_rsp_st *)heap_caps_malloc_prefer(packageLen, 2, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
 #else
-							// CheckOpcodeException(message_rsp);
-							message_rsp_st *messageCheckOpcode = (message_rsp_st *)malloc(packageLen);
+								// CheckOpcodeException(message_rsp);
+								message_rsp_st *messageCheckOpcode = (message_rsp_st *)malloc(packageLen);
 #endif
-							memcpy(messageCheckOpcode, message_rsp, packageLen);
-							messageCheckOpcodeList.push_back(messageCheckOpcode);
+								memcpy(messageCheckOpcode, message_rsp, packageLen);
+								messageCheckOpcodeList.push_back(messageCheckOpcode);
+							}
+							vectorCheckOpcodeMtx.unlock();
 						}
-						vectorCheckOpcodeMtx.unlock();
+						else if (message_rsp->len < 3 || message_rsp->len > 36)
+						{
+							LOGW("Wrong uart data");
+							l = 0;
+							break;
+						}
+						else
+						{
+							break;
+						}
 					}
-					else if (message_rsp->len < 3 || message_rsp->len > 36)
-					{
-						LOGW("Wrong uart data");
-						l = 0;
-						break;
-					}
-					else
-					{
-						break;
-					}
+					old_message_rsp = message_rsp;
+					l -= packageLen;
+					d += packageLen;
 				}
-				old_message_rsp = message_rsp;
-				l -= packageLen;
-				d += packageLen;
-				// }
-				// else
-				// {
-				// 	d++;
-				// 	l--;
-				// }
+				else
+				{
+					d++;
+					l--;
+				}
 			}
 			else
 			{
@@ -477,7 +483,9 @@ int BleProtocol::SendMessage(uint16_t opReq, uint8_t *dataReq, int lenReq, uint8
 	if (opRsp)
 	{
 		// TODO: add mutex
+		mtxMessageRespList.lock();
 		messageRespList.push_back(&message_rsp_list);
+		mtxMessageRespList.unlock();
 	}
 	message_req_st message_req = {
 		.opcode = opReq,
@@ -489,15 +497,25 @@ int BleProtocol::SendMessage(uint16_t opReq, uint8_t *dataReq, int lenReq, uint8
 	Write((uint8_t *)&message_req, lenReq + 2);
 	if (opRsp)
 	{
+#ifdef ESP_PLATFORM
+		int64_t end = esp_timer_get_time() + (int64_t)timeout * 1000;
+		while (!message_rsp_list.status && esp_timer_get_time() < end)
+		{
+			vTaskDelay(pdMS_TO_TICKS(10) ? pdMS_TO_TICKS(10) : 1);
+		}
+#else
 		while (!message_rsp_list.status && timeout--)
 		{
-			SLEEP_MS(1);
+			usleep(1000);
 		}
+#endif
 		if (!message_rsp_list.status)
 		{
 			rs = CODE_ERROR;
 		}
+		mtxMessageRespList.lock();
 		messageRespList.erase(remove(messageRespList.begin(), messageRespList.end(), &message_rsp_list), messageRespList.end());
+		mtxMessageRespList.unlock();
 	}
 	else
 	{
@@ -827,8 +845,8 @@ int BleProtocol::SetGwAddr(uint16_t devAddr, uint16_t gwAddrSet)
 		// 		set_gw_addr_rsp_message->header == RD_HEADER_PROVISION_SET_GW_ADDR)
 		// 	{
 		// 		LOGD("SetGwAddr OK");
-				return CODE_OK;
-			// }
+		return CODE_OK;
+		// }
 		// }
 	}
 	LOGW("SetGwAddr err");
@@ -3571,7 +3589,7 @@ int BleProtocol::ControlRelayOfSwitch(uint16_t devAddr, uint16_t type, uint8_t r
 	}
 	control_relay_switch_message.relay = relay;
 	control_relay_switch_message.value = value;
-	int rs = SendMessage(APP_REQ, (uint8_t *)&control_relay_switch_message, sizeof(control_relay_switch_message_t), HCI_GATEWAY_RSP_OP_CODE, dataRsp, &lenRsp, 1200, controlRelaySwitchHeader, 0, 2);
+	int rs = SendMessage(APP_REQ, (uint8_t *)&control_relay_switch_message, sizeof(control_relay_switch_message_t), HCI_GATEWAY_RSP_OP_CODE, dataRsp, &lenRsp, 12000, controlRelaySwitchHeader, 0, 2);
 	if (rs == CODE_OK)
 	{
 		// typedef struct __attribute__((packed))
@@ -3587,9 +3605,13 @@ int BleProtocol::ControlRelayOfSwitch(uint16_t devAddr, uint16_t type, uint8_t r
 		// control_relay_switch_rsp_message_t *control_relay_switch_rsp_message = (control_relay_switch_rsp_message_t *)dataRsp;
 		// if (control_relay_switch_rsp_message->header == 0x000b && control_relay_switch_rsp_message->relay == relay && control_relay_switch_rsp_message->value == value)
 		// {
-			return CODE_OK;
+		return CODE_OK;
 		// }
 		// LOGW("control relay switch resp state not match with input control");
+	}
+	else
+	{
+		LOGW("control relay switch err, rs: %d", rs);
 	}
 	LOGW("control relay switch err");
 	return CODE_ERROR;
@@ -4285,7 +4307,7 @@ int BleProtocol::UpdateMaxAddr(uint16_t addr)
 	return SendMessage(SYSTEM_REQ, (uint8_t *)&provision_message, sizeof(provision_message_t), HCI_GATEWAY_CMD_PROVISION_EVT, dataRsp, &lenRsp, 15000);
 }
 
-int BleProtocol :: Request_Training(uint8_t enable, uint16_t addr)
+int BleProtocol::Request_Training(uint8_t enable, uint16_t addr)
 {
 	LOGD("BleProtocol ::Request_Training");
 	uint8_t dataRsp[100];
@@ -4310,7 +4332,7 @@ int BleProtocol :: Request_Training(uint8_t enable, uint16_t addr)
 	return SendMessage(APP_REQ, (uint8_t *)&req_training_message, sizeof(req_training_message_t), 0, dataRsp, &lenRsp, 1000);
 }
 
-int BleProtocol :: Request_Pair_K9B(uint16_t addr,uint8_t button_id, uint32_t mac_k9b, uint8_t key_k9b)
+int BleProtocol::Request_Pair_K9B(uint16_t addr, uint8_t button_id, uint32_t mac_k9b, uint8_t key_k9b)
 {
 	LOGD("BleProtocol ::Request_Pair_K9B");
 	uint8_t dataRsp[100];
@@ -4338,8 +4360,7 @@ int BleProtocol :: Request_Pair_K9B(uint16_t addr,uint8_t button_id, uint32_t ma
 	req_training_message.button_id = button_id;
 
 	uint8_t devAddr_check[] = {(uint8_t)(addr & 0xFF), (uint8_t)((addr >> 8) & 0xFF)};
-	return SendMessage(APP_REQ, (uint8_t *)&req_training_message, sizeof(req_training_message_t), HCI_GATEWAY_RSP_OP_CODE, dataRsp, &lenRsp, 1000,devAddr_check,0,2);
-
+	return SendMessage(APP_REQ, (uint8_t *)&req_training_message, sizeof(req_training_message_t), HCI_GATEWAY_RSP_OP_CODE, dataRsp, &lenRsp, 1000, devAddr_check, 0, 2);
 }
 
 int BleProtocol::RPA_Test_Socket(uint16_t devAddr, uint8_t relay, uint8_t led, uint8_t button)
@@ -4370,5 +4391,5 @@ int BleProtocol::RPA_Test_Socket(uint16_t devAddr, uint8_t relay, uint8_t led, u
 	cmd.button = button;
 
 	uint8_t devAddr_check[] = {(uint8_t)(devAddr & 0xFF), (uint8_t)((devAddr >> 8) & 0xFF)};
-	return SendMessage(APP_REQ, (uint8_t *)&cmd, sizeof(cmd_t), HCI_GATEWAY_RSP_OP_CODE, dataRsp, &lenRsp, 1000,devAddr_check,0,2);
+	return SendMessage(APP_REQ, (uint8_t *)&cmd, sizeof(cmd_t), HCI_GATEWAY_RSP_OP_CODE, dataRsp, &lenRsp, 1000, devAddr_check, 0, 2);
 }

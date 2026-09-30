@@ -82,10 +82,13 @@ uint8_t i2c_read_register(uint8_t target_index, uint8_t slave_addr)
     size_t len_to_read = target_index + 1;
     uint8_t rx_buffer[len_to_read];
 
+    i2c_reset_rx_fifo(I2C_MASTER_NUM);
+    i2c_reset_tx_fifo(I2C_MASTER_NUM);
+
     // Gọi hàm đọc thông thường (nó luôn bắt đầu kéo từ index 0 của Telink)
     esp_err_t ret = i2c_master_read_from_device(I2C_MASTER_NUM, slave_addr,
                                                 rx_buffer, len_to_read,
-                                                1000 / portTICK_PERIOD_MS);
+                                                pdMS_TO_TICKS(500));
 
     if (ret == ESP_OK)
     {

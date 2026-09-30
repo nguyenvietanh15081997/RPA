@@ -398,6 +398,8 @@ int Gateway::OnPCBA_GetInfo(Json::Value &reqValue, Json::Value &respValue)
 	JSON_GET_INT(data, "devType", type);
 	JSON_GET_STR(data, "macBle", macBle);
 
+	bleProtocol->macBle = macBle;
+
 	LOGI("macWifi: %s", macWifi.c_str());
 	LOGI("macBle: %s", macBle.c_str());
 	LOGI("cmd    : %s", cmd.c_str());
@@ -440,7 +442,7 @@ int Gateway::OnPCBA_PositionDevice(Json::Value &reqValue, Json::Value &respValue
 
 	if (position >= 0 && position <= 2)
 	{
-		this->listMactest[position] = mac;
+		bleProtocol->listMactest[position] = mac;
 	}
 
 	return CODE_NOT_RESPONSE;
