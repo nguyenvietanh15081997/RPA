@@ -121,6 +121,7 @@ public:
 
 	int Req_StartTest_BLEMesh(string mac);
 	int GetStatusConnectWifi(string mac);
+	int PushTrainnig(string mac);
 
 
 	int StartTestPCBA();

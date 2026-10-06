@@ -425,6 +425,25 @@ int Gateway::GetStatusConnectWifi(string mac)
 	return SendBroadcast(message, bc_ip, Udp::port);
 }
 
+int Gateway::PushTrainnig(string mac)
+{
+	Json::Value root;
+	Json::Value data;
+
+	root["process"] = "trainning";
+
+	data["mac"] = mac;
+	data["type"] = "request";
+
+	root["data"] = data;
+
+	string message = root.toString();
+
+	string bc_ip = Wifi::GetBroadcastIP();
+
+	return SendBroadcast(message, bc_ip, Udp::port);
+}
+
 typedef struct __attribute__((packed))
 {
 	string macWifi;
@@ -590,8 +609,11 @@ int Gateway::TestSwitch()
 	while (1)
 	{
 		// LOGI("TestSwitch");
-		StartTestPCBA();
-		SLEEP_MS(1000);
+		// StartTestPCBA();
+		// SLEEP_MS(1000);
+
+		PushTrainnig("alldevice");
+		sleep(5);
 	}
 }
 
@@ -762,23 +784,23 @@ int Gateway::StartTestPCBA()
 					SLEEP_MS(2000);
 					// for (int h = 0; h < 2; h++)
 					// {
-						for (int j = 0; j < 3; j++)
-						{
-							stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
-							LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
-						}
-					// }	
+					for (int j = 0; j < 3; j++)
+					{
+						stt_on_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
+						LOGI("stt_on_pos[%d]: %d", j, stt_on_pos[j]);
+					}
+					// }
 
 					ble_status = bleProtocol->ControlRelayOfSwitch(inf.addr, 4, 0xFF, 0);
 					SLEEP_MS(2000);
 					// for (int h = 0; h < 2; h++)
 					// {
-						for (int j = 0; j < 3; j++)
-						{
-							stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
-							LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
-						}
-					// }	
+					for (int j = 0; j < 3; j++)
+					{
+						stt_off_pos[j] = (GetSttGroupRelayPos(i) >> j) & 0x01;
+						LOGI("stt_off_pos[%d]: %d", j, stt_off_pos[j]);
+					}
+					// }
 
 					if (!rd_reporting_proc_ctcu(element, i, true, ble_status == CODE_OK ? true : false))
 						checkRs = false;
